@@ -35,5 +35,6 @@ To make sure the AI features work when deployed through GitHub Actions, you need
 |----------------------|--------------------------------------------------|
 | `GEMINI_API_KEY`     | Your Google Gemini API Key (for AI features)     |
 | `OPENROUTER_API_KEY` | Your OpenRouter API Key (if using OpenRouter)    |
+| `NVIDIA_API_KEY`     | Your NVIDIA API Key (for NVIDIA NIM models)      |
 
 Once added, these secrets will be securely injected into the environment when the GitHub Action runs.

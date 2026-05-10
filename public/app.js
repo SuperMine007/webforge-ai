@@ -469,7 +469,7 @@ async function handleTerminalInput(e){
     }catch(ex){addTerminalLine('Error: '+ex.message,'error');state.opencodeHistory.pop()}return;
   }
   addTerminalLine('Executing...','info');
-  try{const res=await fetch('/terminal/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd,stream:true})});
+  try{const res=await fetch('/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd,stream:true})});
     const reader=res.body.getReader();const decoder=new TextDecoder();let buffer='';
     while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();
       for(const line of lines){if(line.startsWith('data: ')){try{const data=JSON.parse(line.slice(6));if(data.type==='stdout')addTerminalLine(data.data,'output');else if(data.type==='stderr')addTerminalLine(data.data,'stderr');else if(data.type==='error')addTerminalLine(data.data,'error')}catch(ex){}}}}

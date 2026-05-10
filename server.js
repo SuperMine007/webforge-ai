@@ -163,7 +163,6 @@ app.get('/credits', (req, res) => {
 
 app.get('/nim-models', (req, res) => {
   const nimKey = process.env.NVIDIA_API_KEY;
-  if (!nimKey) return res.json({ models: [] });
   const models = [
     { id: 'meta/llama-3.1-405b-instruct', name: 'Llama 3.1 405B Instruct' },
     { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B Instruct' },
@@ -650,11 +649,7 @@ Shell Commands:
   }
 });
 
-// Terminal streaming endpoint
-app.post('/terminal/stream', (req, res) => {
-  req.body.stream = true;
-  app._router.handle(req, res);
-});
+
 
 // Download
 app.post('/download', (req, res) => {
