@@ -1,0 +1,292 @@
+# WebForge AI - Setup & Run Guide
+
+## Problems We Faced & How We Fixed Them
+
+### 1. "npm: command not found" / npm not working
+**Problem:** npm commands weren't working properly.
+
+**Fix:** Use `npm install --no-bin-links` to avoid symlink permission issues on some systems.
+
+### 2. Port 3000 Already in Use (EADDRINUSE)
+**Problem:** When running `npm run dev`, we got `Error: listen EADDRINUSE: address already in use 0.0.0.0:3000`. Port 3000 was occupied by another process.
+
+**Fix:** Either:
+- Kill whatever is using port 3000: `fuser -k 3000/tcp` or `killall -9 node`
+- Or run on a different port: `PORT=8080 node server.js`
+
+### 3. GitHub Actions Workflow Issues
+**Problem:** Workflow wasn't properly outputting the TryCloudflare URL and processes were dying early.
+
+**Fix:**
+- Added proper server startup verification before starting tunnel
+- Added loop to wait for and extract tunnel URL
+- Used `tail -f` to keep cloudflared process alive
+- Used `$GITHUB_OUTPUT` for proper GitHub Actions output
+
+### 4. Server Not Accessible via TryCloudflare
+**Problem:** Server was binding to localhost only, not accessible externally through the tunnel.
+
+**Fix:**
+- Changed `app.listen(PORT, ...)` to `app.listen(PORT, HOST, ...)` where HOST='0.0.0.0'
+- Added `app.set('trust proxy', 1)` to handle proxy headers from Cloudflare
+
+### 5. Missing dev Script in package.json
+**Problem:** Running `npm run dev` failed because the script didn't exist.
+
+**Fix:** Added dev script to package.json:
+```json
+"scripts": {
+  "start": "node server.js",
+  "dev": "node server.js",
+  "test": "node server.js"
+}
+```
+
+---
+
+## Commands to Run
+
+### First Time Setup
+```bash
+cd /sdcard/Download/projects/webforge-ai
+npm install --no-bin-links
+```
+
+### Run the Server
+```bash
+cd /sdcard/Download/projects/webforge-ai
+npm run dev
+# OR
+npm run start
+# OR
+node server.js
+```
+
+### Run on Different Port
+```bash
+PORT=8080 node server.js
+```
+
+### If Port 3000 is Busy
+```bash
+# Option 1: Kill whatever is using it
+fuser -k 3000/tcp
+
+# Option 2: Kill all node processes
+killall -9 node
+
+# Option 3: Use different port
+PORT=8080 node server.js
+```
+
+### Background Server (with nohup)
+```bash
+nohup node /sdcard/Download/projects/webforge-ai/server.js > /tmp/webforge.log 2>&1 &
+```
+
+### Check Server Status
+```bash
+# Check if running
+curl http://localhost:3000
+
+# View server logs
+cat /tmp/webforge.log
+
+# Check what's on port 3000
+lsof -i :3000
+```
+
+### Stop Server
+```bash
+killall -9 node
+```
+
+---
+
+## GitHub Actions Deployment
+
+The workflow in `.github/workflows/main.yml` will:
+1. Install dependencies
+2. Start the server on port 3000
+3. Create a TryCloudflare tunnel
+4. Output the public URL
+
+To use it:
+1. Go to GitHub Actions tab
+2. Click "Run WebForge AI" workflow
+3. Wait for the URL in the logs
+
+---
+
+## Environment Variables (Optional)
+
+```bash
+# For OpenRouter API
+OPENROUTER_API_KEY=your_key_here
+
+# For Gemini API
+GEMINI_API_KEY=your_key_here
+
+# Change port (default: 3000)
+PORT=3000
+
+# Change host (default: 0.0.0.0)
+HOST=0.0.0.0
+```
+
+Example with all env vars:
+```bash
+OPENROUTER_API_KEY=sk_xxx GEMINI_API_KEY=xxx PORT=3000 node server.js
+```
+
+---
+
+## File Structure
+
+```
+webforge-ai/
+├── server.js          # Express server
+├── package.json       # Dependencies and scripts
+├── public/
+│   ├── index.html     # Main UI
+│   ├── app.js         # Frontend JavaScript
+│   └── style.css      # Styling
+├── .github/
+│   └── workflows/
+│       └── main.yml   # GitHub Actions workflow
+└── guide.txt          # This file
+```
+
+---
+
+## Notes
+
+- Server binds to `0.0.0.0:3000` so it's accessible externally via tunnel
+- Trust proxy is enabled for proper header handling through Cloudflare
+- Token modes (Auto/Fast/Balanced/Planning/Manual) only affect generation, NOT OpenCode terminal
+- OpenCode terminal uses its own settings independently
+
+---
+
+## Uploading to GitHub - IMPORTANT
+
+### DO NOT Commit These Files
+
+Create a `.gitignore` with these contents:
+
+```
+# Dependencies (installed via npm install)
+node_modules/
+
+# Environment files with secrets
+.env
+.env.*
+*.env
+
+# Logs
+*.log
+npm-debug.log*
+/tmp/
+/temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local server logs
+server.log
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+```
+
+### Required Files to Commit
+
+```
+webforge-ai/
+├── server.js          ✅ Commit
+├── package.json       ✅ Commit (no secrets!)
+├── package-lock.json  ✅ Commit
+├── public/
+│   ├── index.html     ✅ Commit
+│   ├── app.js         ✅ Commit
+│   └── style.css      ✅ Commit
+├── .github/
+│   └── workflows/
+│       └── main.yml   ✅ Commit
+├── .gitignore         ✅ Create this!
+└── guide.txt           ✅ Commit (optional)
+```
+
+### Critical: Setting Up GitHub Secrets
+
+Your API keys MUST be stored in GitHub Secrets, NOT in the code!
+
+1. **Go to:** GitHub repo → Settings → Secrets and variables → Actions
+
+2. **Add these secrets:**
+   - `OPENROUTER_API_KEY` - Your OpenRouter API key
+   - `GEMINI_API_KEY` - Your Gemini API key (optional)
+
+3. **How the workflow uses them:**
+   ```yaml
+   env:
+     OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+     GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+   ```
+
+### Why This Matters
+
+❌ **NEVER do this:**
+```javascript
+// BAD! This commits your API key to GitHub!
+const apiKey = "sk_live_abc123xyz";
+```
+
+✅ **DO this instead:**
+```javascript
+// GOOD! This reads from environment variable
+const apiKey = process.env.OPENROUTER_API_KEY;
+```
+
+### Before Every Push
+
+1. Check `.gitignore` exists and covers `.env*` files
+2. Verify no API keys in code files:
+   ```bash
+   grep -r "sk_" --include="*.js" .
+   grep -r "api_key" --include="*.js" .
+   ```
+3. Make sure `node_modules/` is in `.gitignore`
+4. Verify GitHub Secrets are set up
+
+### GitHub Actions Workflow Notes
+
+- Workflow triggers on: push to main, or manual workflow_dispatch
+- Runs for max 355 minutes (nearly 6 hours)
+- Creates temporary public URL via TryCloudflare tunnel
+- Server must be able to handle concurrent requests
+- No database - all state is in memory
+
+### If Workflow Fails
+
+Common issues:
+1. **Secrets not set** - Check GitHub repo Settings → Secrets
+2. **npm install fails** - May need `--no-bin-links` flag in workflow
+3. **Server won't start** - Check port 3000 isn't hardcoded somewhere
+4. **Cloudflare URL not showing** - Increase wait loop iterations
+
+### Branch Protection (Recommended)
+
+For production, consider adding:
+- Require PR reviews before merge
+- Require status checks to pass
+- Do not allow force pushing to main

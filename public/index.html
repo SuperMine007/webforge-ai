@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WebForge AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- TITLEBAR (VS Code style menu bar) -->
+<div class="titlebar">
+  <div class="titlebar-left">
+    <div class="titlebar-icon">
+      <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs>
+        <polygon points="14,2 26,22 2,22" stroke="url(#g)" stroke-width="2" fill="none"/>
+        <polygon points="14,8 21,19 7,19" fill="url(#g)" opacity="0.3"/>
+      </svg>
+    </div>
+    <button class="menu-btn" id="menuFile">File</button>
+    <button class="menu-btn" id="menuEdit">Edit</button>
+    <button class="menu-btn" id="menuView">View</button>
+    <button class="menu-btn" id="menuTerminalMenu">Terminal</button>
+    <button class="menu-btn" id="menuHelp">Help</button>
+  </div>
+  <div class="titlebar-center">
+    <div class="titlebar-search">
+      <input type="text" id="promptInput" placeholder="WebForge AI — Describe what you want to build..." autocomplete="off">
+      <button class="btn-generate" id="btnGenerate">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 2l10 6-10 6V2z" fill="currentColor"/></svg>
+        Generate
+      </button>
+    </div>
+  </div>
+  <div class="titlebar-right">
+    <div class="titlebar-controls">
+      <div class="token-select" id="tokenSelect">
+        <button class="ctrl-btn" id="btnToken">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M4 8h8" stroke="currentColor" stroke-width="1.5"/></svg>
+          <span id="tokenLabel">Auto</span>
+          <svg width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+        <div class="token-dropdown" id="tokenDropdown">
+          <div class="dropdown-title">Token Mode</div>
+          <button class="token-opt active" data-mode="auto"><span>Auto</span><span class="token-opt-badge">Smart</span></button>
+          <button class="token-opt" data-mode="fast"><span>Fast</span><span class="token-opt-badge">2K</span></button>
+          <button class="token-opt" data-mode="balanced"><span>Balanced</span><span class="token-opt-badge">6K</span></button>
+          <button class="token-opt" data-mode="planning"><span>Planning</span><span class="token-opt-badge">12K</span></button>
+          <button class="token-opt" data-mode="manual"><span>Manual</span><span class="token-opt-badge">Custom</span></button>
+          <div class="token-manual-section" id="manualTokenSection" style="display:none;">
+            <div class="token-manual-label">Max Tokens</div>
+            <input type="number" class="token-manual-input" id="manualTokenInput" placeholder="100-32000" min="100" max="32000" value="4000">
+            <div class="token-recommendations">
+              <span>Min: <span class="rec-value" id="tokenManualMin">100</span></span>
+              <span>Max: <span class="rec-value" id="tokenManualMax">32000</span></span>
+              <span>Rec: <span class="rec-value" id="tokenManualRec">4000</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <select id="providerSelect" class="provider-select">
+        <option value="openrouter">OpenRouter</option>
+        <option value="gemini">Gemini</option>
+        <option value="nim">NVIDIA NIM</option>
+      </select>
+      <button class="ctrl-btn" id="btnModel">
+        <span id="modelName">claude-3.5-sonnet</span>
+        <svg width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+      <div class="model-dropdown" id="modelDropdown">
+        <div class="model-dropdown-header" id="modelDropdownHeader">
+          <span>Select Model</span>
+          <span class="model-tier-badge">Standard</span>
+        </div>
+        <input type="text" id="modelSearch" placeholder="Search models...">
+        <label><input type="checkbox" id="freeOnly"> Free only</label>
+        <div class="model-list" id="modelList"></div>
+        <input type="text" id="modelManual" class="manual-input" placeholder="Enter model ID...">
+      </div>
+      <button class="ctrl-btn" id="btnClear" title="Clear files">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1010.5-4M2 4v4h4" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
+      <button class="ctrl-btn hidden" id="btnDownload" title="Download ZIP">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 12v1h10v-1" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE TABS -->
+<nav class="mobile-tabs" id="mobileTabs">
+  <button class="mob-tab" data-panel="sidebar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v13h18V7M3 7V4h7l2 3h9"/></svg>
+    Files
+  </button>
+  <button class="mob-tab active" data-panel="code">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3l-4 10M5 5L2 8l3 3M11 5l3 3-3 3" stroke="currentColor" stroke-width="1.2"/></svg>
+    Code
+  </button>
+  <button class="mob-tab" data-panel="preview">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="10" rx="1" stroke="currentColor"/><path d="M5 14h6M8 12v2" stroke="currentColor"/></svg>
+    Preview
+  </button>
+  <button class="mob-tab" data-panel="terminal">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l3 2-3 2" stroke="currentColor" stroke-width="1.3"/><path d="M9 11h4" stroke="currentColor" stroke-width="1.3"/></svg>
+    Terminal
+  </button>
+</nav>
+
+<!-- MAIN LAYOUT -->
+<div class="main-layout">
+  <!-- ACTIVITY BAR -->
+  <div class="activity-bar">
+    <div class="activity-top">
+      <button class="ab-btn active" data-panel="explorer" title="Explorer (Ctrl+Shift+E)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v13h18V7M3 7V4h7l2 3h9"/></svg>
+      </button>
+      <button class="ab-btn" data-panel="search" title="Search (Ctrl+Shift+F)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      </button>
+      <button class="ab-btn" data-panel="scm" title="Source Control (Ctrl+Shift+G)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="18" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="18" cy="12" r="2"/><path d="M12 8v8M14 6h2a2 2 0 012 2v2"/></svg>
+      </button>
+      <button class="ab-btn" data-panel="extensions" title="Extensions (Ctrl+Shift+X)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+      </button>
+    </div>
+    <div class="activity-bottom">
+      <button class="ab-btn" title="Accounts">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3-7 7-7s7 3 7 7"/></svg>
+      </button>
+      <button class="ab-btn" title="Manage">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="panelSidebar">
+    <div class="sidebar-title">
+      <span id="sidebarTitleText">EXPLORER</span>
+      <div class="sidebar-title-actions" id="sidebarTitleActions">
+        <button class="sb-btn" id="btnCollapseAll" title="Collapse All">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9 9l-4-4M5 9h4V5" stroke="currentColor" stroke-width="1.3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- EXPLORER PANEL -->
+    <div class="sidebar-panel" id="panelExplorer">
+      <div class="sidebar-section">
+        <div class="sidebar-section-header" id="sidebarProjectHeader">
+          <svg class="chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M3 2l4 3-4 3" fill="currentColor"/></svg>
+          <span>WEBFORGE PROJECT</span>
+          <div class="sidebar-section-actions">
+            <button class="sb-btn" id="btnNewFile" title="New File...">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 3H4v10h8V3zM8 6v4M6 8h4" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+            <button class="sb-btn" id="btnNewFolder" title="New Folder...">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4v8h12V6H8L6 4H2z" stroke="currentColor" stroke-width="1.2"/><path d="M8 8v3M6.5 9.5h3" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+            <button class="sb-btn" id="btnUpload" title="Upload Files">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 11V4M5 7l3-3 3 3M2 13h12" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+            <input type="file" id="fileInput" multiple hidden>
+          </div>
+        </div>
+        <div class="file-tree" id="fileTree">
+          <div class="empty-tree">
+            <p>No files yet</p>
+            <small>Generate or upload files</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEARCH PANEL -->
+    <div class="sidebar-panel hidden" id="panelSearch">
+      <div class="sidebar-search-panel">
+        <input type="text" class="search-input" placeholder="Search in files..." id="sidebarSearchInput">
+        <div class="search-results" id="searchResults">
+          <div class="empty-tree"><p>Type to search across files</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOURCE CONTROL PANEL -->
+    <div class="sidebar-panel hidden" id="panelScm">
+      <div class="empty-tree">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.3;margin-bottom:8px"><circle cx="12" cy="18" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="18" cy="12" r="2"/><path d="M12 8v8M14 6h2a2 2 0 012 2v2"/></svg>
+        <p>No source control providers</p>
+        <small>Initialize a repository to get started</small>
+      </div>
+    </div>
+
+    <!-- EXTENSIONS PANEL -->
+    <div class="sidebar-panel hidden" id="panelExtensions">
+      <div class="empty-tree">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.3;margin-bottom:8px"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+        <p>WebForge Extensions</p>
+        <small>AI Code Generation · Preview · Terminal</small>
+      </div>
+    </div>
+  </aside>
+
+  <!-- EDITOR GROUP -->
+  <div class="editor-group">
+    <!-- TAB BAR -->
+    <div class="tab-bar" id="tabBar">
+      <div class="tabs-wrap">
+        <div class="editor-tab active" id="fileTab">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8H4V2z" stroke="currentColor" stroke-width="1.2"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.2"/></svg>
+          <span class="tab-label">Welcome</span>
+          <button class="tab-close" title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="tab-actions">
+        <button class="sb-btn" id="btnSplitEditor" title="Split Editor Right">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M8 2v12" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <button class="sb-btn" id="btnMoreActions" title="More Actions...">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="3" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="13" r="1.2" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- BREADCRUMB -->
+    <div class="breadcrumb-bar" id="breadcrumbBar">
+      <span class="breadcrumb-item">WebForge Project</span>
+      <svg class="breadcrumb-sep" width="10" height="10" viewBox="0 0 10 10"><path d="M3 2l4 3-4 3" fill="currentColor"/></svg>
+      <span class="breadcrumb-item active" id="breadcrumbFile">Welcome</span>
+    </div>
+
+    <!-- EDITOR + PREVIEW SPLIT -->
+    <div class="editor-split">
+      <!-- CODE PANEL -->
+      <section class="code-panel" id="panelCode">
+        <div class="editor-actions-bar">
+          <div class="editor-actions-left"></div>
+          <div class="editor-actions-right">
+            <button class="sb-btn" id="btnEdit" title="Edit (Ctrl+E)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 2l2 2-9 9H3v-2L12 2z" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+            <button class="sb-btn hidden" id="btnSave" title="Save (Ctrl+S)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V5l-3-3z" stroke="currentColor" stroke-width="1.2"/><path d="M10 2v3H7" stroke="currentColor" stroke-width="1.2"/><path d="M6 9h4M6 11h2" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+            <button class="sb-btn" id="btnCopy" title="Copy">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M2 11V3a1 1 0 011-1h8" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="code-view">
+          <div class="minimap" id="minimap"></div>
+          <div class="line-nums" id="lineNums"></div>
+          <pre class="code-content" id="codeContent"><code>// Select a file from the explorer</code></pre>
+          <textarea class="code-editor hidden" id="codeEditor"></textarea>
+        </div>
+      </section>
+
+      <!-- PREVIEW PANEL -->
+      <section class="preview-panel" id="panelPreview">
+        <div class="preview-header">
+          <span>Preview</span>
+          <div class="preview-actions">
+            <div class="device-btns">
+              <button class="device-btn active" data-device="desktop" title="Desktop">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="10" rx="1" stroke="currentColor"/><path d="M5 14h6M8 12v2" stroke="currentColor"/></svg>
+              </button>
+              <button class="device-btn" data-device="mobile" title="Mobile">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor"/></svg>
+              </button>
+            </div>
+            <button class="sb-btn" id="btnRefresh" title="Refresh Preview">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13 8A5 5 0 118 3M8 3l3 3M8 3l3-3" stroke="currentColor"/></svg>
+            </button>
+            <button class="sb-btn" id="btnNewTab" title="Open in New Tab">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M7 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1V9M10 2h4v4M14 2l-6 6" stroke="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="preview-body" id="previewBody">
+          <div class="preview-placeholder" id="previewPlaceholder">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="4" y="8" width="40" height="32" rx="3" stroke="currentColor" stroke-dasharray="4 3"/></svg>
+            <p>Preview will appear here</p>
+          </div>
+          <iframe id="previewFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+      </section>
+    </div>
+
+    <!-- INTEGRATED TERMINAL (VS Code panel) -->
+    <div class="panel-area hidden" id="panelArea">
+      <div class="panel-tabs">
+        <div class="panel-tab-bar">
+          <button class="panel-tab active" data-ptab="terminal">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l3 2-3 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M9 11h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Terminal
+          </button>
+          <button class="panel-tab" data-ptab="problems">Problems</button>
+          <button class="panel-tab" data-ptab="output">Output</button>
+        </div>
+        <div class="panel-tab-actions">
+          <div class="terminal-shell-select">
+            <select id="terminalShellSelect" class="shell-select">
+              <option value="powershell">PowerShell</option>
+              <option value="cmd">Command Prompt</option>
+              <option value="bash">Git Bash</option>
+              <option value="opencode">OpenCode AI</option>
+            </select>
+          </div>
+          <button class="sb-btn" id="btnNewTerminal" title="New Terminal (Ctrl+Shift+`)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v8M4 8h8" stroke="currentColor" stroke-width="1.3"/></svg>
+          </button>
+          <button class="sb-btn" id="btnSplitTerminal" title="Split Terminal">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M8 2v12" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="sb-btn" id="btnKillTerminal" title="Kill Terminal">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.2" fill="currentColor" opacity="0.6"/></svg>
+          </button>
+          <button class="sb-btn" id="btnMaxPanel" title="Maximize Panel">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="sb-btn" id="btnClosePanel" title="Close Panel (Ctrl+`)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="panel-content">
+        <div class="terminal-instances">
+          <div class="term-instance active">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l3 2-3 2" stroke="currentColor" stroke-width="1.3"/><path d="M9 11h4" stroke="currentColor" stroke-width="1.3"/></svg>
+            <span>pwsh</span>
+          </div>
+        </div>
+        <div class="terminal-viewport">
+          <div class="terminal-output" id="terminalOutput">
+            <div class="t-line t-info">WebForge Terminal v2.0</div>
+            <div class="t-line t-info">Type 'help' for available commands</div>
+            <div class="t-line t-info">Use /connect &lt;api-key&gt; to authenticate with OpenCode</div>
+            <div class="t-line" style="color:var(--text3)">────────────────────────────────────────</div>
+          </div>
+          <div class="terminal-input-row" id="terminalInputRow">
+            <span class="t-prompt">❯</span>
+            <input type="text" id="terminalInput" placeholder="Type command..." autocomplete="off" spellcheck="false">
+          </div>
+          
+          <!-- OPENCODE UI -->
+          <div class="opencode-ui hidden" id="opencodeUi">
+            <div class="opencode-center">
+              <div class="opencode-logo">open<span style="opacity:0.6">code</span></div>
+              <div class="opencode-input-container">
+                <input type="text" class="opencode-input" id="opencodeInput" placeholder="Ask anything... &quot;Fix a TODO in the codebase&quot;" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="opencode-footer">
+                <span>Build · WebForge AI Free</span>
+                <span style="color:var(--text3)">OpenCode Zen</span>
+                <span class="opencode-shortcuts">tab <span style="color:var(--text)">agents</span> ctrl+p <span style="color:var(--text)">commands</span></span>
+              </div>
+            </div>
+            <div class="opencode-tip">
+              <span class="opencode-path">D:\myprojectscoding\webforge-ai:main</span>
+              <span style="color:var(--yellow)">● Tip</span> Set agent temperature from 0.0 (focused) to 1.0 (creative)
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="status-bar" id="statusBar">
+  <div class="status-left">
+    <button class="sb-item sb-remote" id="btnRemote" title="Remote">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.3 2.3C6 .6 8.7.2 10.8 1.1l-1 1.5c-1.4-.6-3-.3-4.1.8C4.6 4.5 4.3 6 4.9 7.5l-1.5 1C2.5 6.4 2.6 3.9 4.3 2.3zm7.4 11.4C10 15.4 7.3 15.8 5.2 14.9l1-1.5c1.4.6 3 .3 4.1-.8 1.1-1.1 1.4-2.6.8-4.1l1.5-1c.9 2.1.8 4.6-.9 6.2z"/><circle cx="8" cy="8" r="2"/></svg>
+    </button>
+    <button class="sb-item" id="btnBranch" title="Branch">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="4" r="1.5" stroke="currentColor"/><circle cx="5" cy="12" r="1.5" stroke="currentColor"/><circle cx="11" cy="7" r="1.5" stroke="currentColor"/><path d="M5 5.5v5M5 7h4.5a1 1 0 001-1V7" stroke="currentColor"/></svg>
+      <span>main</span>
+    </button>
+    <span class="sb-item">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Ready</span>
+    </span>
+    <span class="sb-item" id="statusTokens"></span>
+    <span class="sb-item" id="statusTier" style="display:none;"></span>
+  </div>
+  <div class="status-right">
+    <span class="sb-item" id="statusCredits">$—</span>
+    <span class="sb-item" id="statusLang">Plain Text</span>
+    <span class="sb-item">UTF-8</span>
+    <span class="sb-item">LF</span>
+    <button class="sb-item" id="btnNotifications" title="Notifications">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1a4 4 0 00-4 4v3l-1 2h10l-1-2V5a4 4 0 00-4-4zM6 12h4a2 2 0 01-4 0" stroke="currentColor" stroke-width="1.2"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- FILE MENU DROPDOWN -->
+<div class="context-menu hidden" id="fileMenu">
+  <button class="ctx-item" data-action="newFile">New File <span class="ctx-shortcut">Ctrl+N</span></button>
+  <button class="ctx-item" data-action="newFolder">New Folder</button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" data-action="upload">Open File... <span class="ctx-shortcut">Ctrl+O</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" data-action="saveFile">Save <span class="ctx-shortcut">Ctrl+S</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" data-action="download">Download ZIP</button>
+  <button class="ctx-item" data-action="clearAll">Clear All Files</button>
+</div>
+
+<!-- EDIT MENU -->
+<div class="context-menu hidden" id="editMenu">
+  <button class="ctx-item" onclick="document.execCommand('undo')">Undo <span class="ctx-shortcut">Ctrl+Z</span></button>
+  <button class="ctx-item" onclick="document.execCommand('redo')">Redo <span class="ctx-shortcut">Ctrl+Y</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" onclick="document.execCommand('cut')">Cut <span class="ctx-shortcut">Ctrl+X</span></button>
+  <button class="ctx-item" onclick="document.execCommand('copy')">Copy <span class="ctx-shortcut">Ctrl+C</span></button>
+  <button class="ctx-item" onclick="document.execCommand('paste')">Paste <span class="ctx-shortcut">Ctrl+V</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" onclick="document.execCommand('selectAll')">Select All <span class="ctx-shortcut">Ctrl+A</span></button>
+</div>
+
+<!-- VIEW MENU -->
+<div class="context-menu hidden" id="viewMenu">
+  <button class="ctx-item" onclick="document.querySelector('.sidebar').style.display=document.querySelector('.sidebar').style.display==='none'?'flex':'none'">Toggle Sidebar <span class="ctx-shortcut">Ctrl+B</span></button>
+  <button class="ctx-item" onclick="document.getElementById('panelArea').classList.toggle('hidden')">Toggle Terminal <span class="ctx-shortcut">Ctrl+`</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" onclick="document.querySelector('.preview-panel').style.display=document.querySelector('.preview-panel').style.display==='none'?'flex':'none'">Toggle Preview</button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" onclick="document.body.requestFullscreen?.()">Full Screen <span class="ctx-shortcut">F11</span></button>
+</div>
+
+<!-- HELP MENU -->
+<div class="context-menu hidden" id="helpMenu">
+  <button class="ctx-item" onclick="alert('WebForge AI v2.0\n\nAI-powered web IDE.\nGenerate websites using natural language.\n\nShortcuts:\nCtrl+N: New File\nCtrl+O: Open File\nCtrl+S: Save\nCtrl+B: Toggle Sidebar\nCtrl+`: Toggle Terminal\nCtrl+K: Focus Prompt')">About WebForge AI</button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" onclick="window.open('https://github.com/SuperMine007/webforge-ai','_blank')">GitHub Repository</button>
+  <button class="ctx-item" onclick="document.getElementById('panelArea').classList.remove('hidden');document.getElementById('terminalInput').focus()">Open Terminal</button>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay hidden" id="loadingOverlay">
+  <div class="loading-card">
+    <div class="spinner"></div>
+    <p>Generating...</p>
+    <div class="loading-card-sub">Creating your project</div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

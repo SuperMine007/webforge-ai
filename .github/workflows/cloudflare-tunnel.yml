@@ -1,0 +1,46 @@
+name: Deploy to TryCloudflare
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Start Server in Background
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          npm run dev &
+          sleep 5
+
+      - name: Install cloudflared
+        run: |
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+
+      - name: Start Cloudflare Tunnel
+        run: |
+          echo "Starting Cloudflare Tunnel..."
+          # Start tunnel and extract the URL
+          cloudflared tunnel --url http://localhost:3000 > cloudflared.log 2>&1 &
+          sleep 10
+          echo "=========================================================="
+          echo "WebForge AI is live at:"
+          grep -o 'https://[-0-9a-zA-Z]*\.trycloudflare\.com' cloudflared.log
+          echo "=========================================================="
+          # Keep the action running
+          tail -f cloudflared.log
