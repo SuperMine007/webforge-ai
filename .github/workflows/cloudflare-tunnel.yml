@@ -27,8 +27,11 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: |
-          npm run dev &
+          npm run dev > server.log 2>&1 &
           sleep 5
+          echo "=== Server Startup Logs ==="
+          cat server.log
+          echo "========================="
 
       - name: Install cloudflared
         run: |
