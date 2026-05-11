@@ -270,6 +270,10 @@
         <div class="preview-header">
           <span>Preview</span>
           <div class="preview-actions">
+            <div class="preview-port">
+              <span style="font-size:11px;color:var(--text2)">Port:</span>
+              <input type="text" id="previewPortInput" placeholder="5173" style="width:40px;background:var(--bg1);border:1px solid var(--bg3);color:var(--text1);border-radius:3px;padding:2px 4px;font-size:11px;outline:none;">
+            </div>
             <div class="device-btns">
               <button class="device-btn active" data-device="desktop" title="Desktop">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="10" rx="1" stroke="currentColor"/><path d="M5 14h6M8 12v2" stroke="currentColor"/></svg>
@@ -405,7 +409,8 @@
   <button class="ctx-item" data-action="newFile">New File <span class="ctx-shortcut">Ctrl+N</span></button>
   <button class="ctx-item" data-action="newFolder">New Folder</button>
   <div class="ctx-sep"></div>
-  <button class="ctx-item" data-action="upload">Open File... <span class="ctx-shortcut">Ctrl+O</span></button>
+  <button class="ctx-item" data-action="upload">Upload File...</button>
+  <button class="ctx-item" data-action="uploadFolder">Upload Folder...</button>
   <div class="ctx-sep"></div>
   <button class="ctx-item" data-action="saveFile">Save <span class="ctx-shortcut">Ctrl+S</span></button>
   <div class="ctx-sep"></div>
@@ -443,14 +448,23 @@
   <button class="ctx-item" onclick="document.getElementById('panelArea').classList.remove('hidden');document.getElementById('terminalInput').focus()">Open Terminal</button>
 </div>
 
-<!-- LOADING OVERLAY -->
-<div class="loading-overlay hidden" id="loadingOverlay">
-  <div class="loading-card">
-    <div class="spinner"></div>
-    <p>Generating...</p>
-    <div class="loading-card-sub">Creating your project</div>
+<!-- CHAT PANEL OVERLAY -->
+<div class="chat-overlay hidden" id="chatOverlay">
+  <div class="chat-panel">
+    <div class="chat-header">
+      <svg width="14" height="14" viewBox="0 0 28 28" fill="none"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs><polygon points="14,2 26,22 2,22" stroke="url(#g2)" stroke-width="2" fill="none"/></svg>
+      <span>AI Assistant</span>
+      <button class="chat-close" onclick="document.getElementById('chatOverlay').classList.add('hidden')">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+    </div>
+    <div class="chat-body" id="chatBody"></div>
   </div>
 </div>
+
+<!-- HIDDEN INPUTS -->
+<input type="file" id="fileInput" multiple style="display:none">
+<input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
 
 <!-- TOAST -->
 <div class="toast-container" id="toastContainer"></div>

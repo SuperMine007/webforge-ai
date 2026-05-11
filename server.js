@@ -3,6 +3,7 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const { spawn } = require('child_process');
 const os = require('os');
 const pty = require('node-pty');
@@ -82,6 +83,21 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/preview', express.static(WORKSPACE_DIR));
+
+// Dynamic Proxy for high-end projects (e.g. Next.js, Vite)
+app.use('/proxy/:port', (req, res, next) => {
+  const port = req.params.port;
+  if (!port || isNaN(port)) return next();
+  createProxyMiddleware({
+    target: `http://127.0.0.1:${port}`,
+    changeOrigin: true,
+    ws: true,
+    pathRewrite: { [`^/proxy/${port}`]: '' },
+    onError: (err, req, res) => {
+      res.status(502).send(`Proxy Error: Dev server on port ${port} might not be running. Start it in the terminal first.`);
+    }
+  })(req, res, next);
+});
 
 // File System APIs
 app.get('/api/projects', (req, res) => {
