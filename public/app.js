@@ -1,5 +1,5 @@
 'use strict';
-const state={files:{},currentFile:null,models:[],selectedModel:'anthropic/claude-3.5-sonnet',tokenMode:'auto',manualTokens:4000,opencodeApiKey:null,opencodeConnected:false,opencodeHistory:[],modelTier:'default',currentProvider:'openrouter',folders:{},terminals:[{id:1,name:'pwsh',ws:null,term:null,fitAddon:null}],activeTerminal:1,terminalCounter:1};
+const state={files:{},currentFile:null,currentProject:null,models:[],selectedModel:'anthropic/claude-3.5-sonnet',tokenMode:'auto',manualTokens:4000,opencodeApiKey:null,opencodeConnected:false,opencodeHistory:[],modelTier:'default',currentProvider:'openrouter',folders:{},terminals:[{id:1,name:'pwsh',ws:null,term:null,fitAddon:null}],activeTerminal:1,terminalCounter:1};
 const $=id=>document.getElementById(id),$$=sel=>document.querySelectorAll(sel);
 
 // DOM refs
@@ -41,7 +41,7 @@ function init(){
 
   // Code editing
   btnEdit.addEventListener('click',()=>{if(!state.currentFile)return;codeEditor.value=state.files[state.currentFile]||'';codeEditor.classList.remove('hidden');codeContent.classList.add('hidden');btnEdit.classList.add('hidden');btnSave.classList.remove('hidden');codeEditor.focus()});
-  btnSave.addEventListener('click',()=>{if(!state.currentFile)return;state.files[state.currentFile]=codeEditor.value;codeContent.innerHTML=highlight(codeEditor.value,state.currentFile);renderLineNums(codeEditor.value);closeEditor();buildPreview();toast('Saved','ok')});
+  btnSave.addEventListener('click',()=>{if(!state.currentFile)return;state.files[state.currentFile]=codeEditor.value;saveFileToServer(state.currentFile,codeEditor.value);codeContent.innerHTML=highlight(codeEditor.value,state.currentFile);renderLineNums(codeEditor.value);closeEditor();buildPreview();toast('Saved','ok')});
   btnCopy.addEventListener('click',()=>{if(!state.currentFile)return;navigator.clipboard.writeText(state.files[state.currentFile]||'').then(()=>toast('Copied!','ok'))});
   codeEditor.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const s=codeEditor.selectionStart;codeEditor.value=codeEditor.value.slice(0,s)+'  '+codeEditor.value.slice(codeEditor.selectionEnd);codeEditor.selectionStart=codeEditor.selectionEnd=s+2}if(e.ctrlKey&&e.key==='s'){e.preventDefault();btnSave.click()}});
   codeEditor.addEventListener('input',()=>renderLineNums(codeEditor.value));
@@ -127,7 +127,7 @@ function init(){
 
   // File menu
   setupMenu('menuFile',fileMenu);
-  $$('.ctx-item').forEach(item=>item.addEventListener('click',()=>{const a=item.dataset.action;closeAllMenus();if(a==='newFile')createNewFile();else if(a==='newFolder')createNewFolder();else if(a==='upload')fileInput.click();else if(a==='saveFile'){if(!codeEditor.classList.contains('hidden'))btnSave.click();else toast('No unsaved changes','info');}else if(a==='download')downloadZip();else if(a==='clearAll')btnClear.click()}));
+  $$('.ctx-item').forEach(item=>item.addEventListener('click',()=>{const a=item.dataset.action;closeAllMenus();if(a==='newProject')createNewProject();else if(a==='openProject')openProject();else if(a==='newFile')createNewFile();else if(a==='newFolder')createNewFolder();else if(a==='upload')fileInput.click();else if(a==='saveFile'){if(!codeEditor.classList.contains('hidden'))btnSave.click();else toast('No unsaved changes','info');}else if(a==='download')downloadZip();else if(a==='clearAll')btnClear.click()}));
 
   // Edit menu
   setupMenu('menuEdit','editMenu');
@@ -293,7 +293,8 @@ function initTerminal(id, shellType='powershell') {
   t.fitAddon.fit();
   
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  t.ws = new WebSocket(`${protocol}//${location.host}/pty?shell=${shellType}`);
+  const cwdParam = state.currentProject ? `&cwd=${encodeURIComponent(state.currentProject)}` : '';
+  t.ws = new WebSocket(`${protocol}//${location.host}/pty?shell=${shellType}${cwdParam}`);
   
   t.ws.onopen = () => {
     t.term.onData(data => {
@@ -404,8 +405,65 @@ function doSearch(){
   resultsEl.querySelectorAll('.search-result-item').forEach(item=>item.addEventListener('click',()=>openFile(item.dataset.file)));
 }
 
-function createNewFile(){const name=prompt('New File Name:');if(name&&name.trim()){state.files[name.trim()]='';renderFileTree();openFile(name.trim())}}
-function createNewFolder(){const name=prompt('New Folder Name:');if(name&&name.trim()){state.folders[name.trim()]=true;renderFileTree();toast('Folder created','ok')}}
+async function createNewProject(){
+  const name=prompt('New Project Name:');
+  if(!name||!name.trim())return;
+  try{
+    const res=await fetch('/api/projects/new',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()})});
+    const data=await res.json();
+    if(data.success){
+      toast('Project created','success');
+      loadProject(name.trim());
+    } else toast(data.error||'Failed to create project','error');
+  }catch(e){toast('Error: '+e.message,'error')}
+}
+
+async function openProject(){
+  try{
+    const res=await fetch('/api/projects');
+    const data=await res.json();
+    if(!data.projects||!data.projects.length){toast('No projects found','warning');return}
+    const name=prompt('Select Project:\n'+data.projects.join('\n'));
+    if(name&&data.projects.includes(name))loadProject(name);
+    else if(name)toast('Project not found','error');
+  }catch(e){toast('Error loading projects','error')}
+}
+
+async function loadProject(name){
+  state.currentProject=name;
+  const el=$('currentProjectName');if(el)el.textContent=name.toUpperCase();
+  try{
+    const res=await fetch('/api/files?project='+encodeURIComponent(name));
+    const data=await res.json();
+    state.files=data.files||{};
+    state.folders={};
+    state.currentFile=null;
+    renderFileTree();
+    buildPreview();
+    toast('Loaded project: '+name,'ok');
+    // Restart active terminal to update CWD
+    initTerminal(state.activeTerminal, state.terminals.find(t=>t.id===state.activeTerminal)?.shellType||'powershell');
+  }catch(e){toast('Error loading files','error')}
+}
+
+async function saveFileToServer(filename, content){
+  if(!state.currentProject)return;
+  try{await fetch('/api/files/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:state.currentProject,files:{[filename]:content}})});}catch(e){}
+}
+
+async function deleteFileFromServer(filename){
+  if(!state.currentProject)return;
+  try{await fetch('/api/files/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:state.currentProject,filepath:filename})});}catch(e){}
+}
+
+function createNewFile(){
+  if(!state.currentProject){toast('Open or create a project first','warning');return;}
+  const name=prompt('New File Name:');if(name&&name.trim()){state.files[name.trim()]='';renderFileTree();openFile(name.trim());saveFileToServer(name.trim(),'')}
+}
+function createNewFolder(){
+  if(!state.currentProject){toast('Open or create a project first','warning');return;}
+  const name=prompt('New Folder Name:');if(name&&name.trim()){state.folders[name.trim()]=true;renderFileTree();toast('Folder created (local only until files added)','ok')}
+}
 
 // Load models
 async function loadModels(){
@@ -436,11 +494,17 @@ async function loadCredits(){try{const res=await fetch('/credits');const data=aw
 
 async function generate(){
   const prompt=promptInput.value.trim();if(!prompt){toast('Enter a prompt','warning');return}if(!state.selectedModel){toast('Select a model','warning');return}
+  if(!state.currentProject){toast('Please create or open a project first!','warning');return}
   setStatus('Generating...','busy');loadingOverlay.classList.remove('hidden');
   try{
-    const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,model:state.selectedModel,provider:providerSelect.value,tokenMode:state.tokenMode,manualTokens:state.tokenMode==='manual'?state.manualTokens:null})});
+    const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,model:state.selectedModel,provider:providerSelect.value,tokenMode:state.tokenMode,manualTokens:state.tokenMode==='manual'?state.manualTokens:null,project:state.currentProject})});
     const data=await res.json();
-    if(data.files&&Object.keys(data.files).length){state.files={...state.files,...data.files};renderFileTree();buildPreview();btnDownload.classList.remove('hidden');toast('Generated '+Object.keys(data.files).length+' files','ok');setStatus('Generated','ok',5000);if(data.tokensUsed&&statusTokens)statusTokens.textContent=data.tokensUsed+' tokens'}
+    if(data.files&&Object.keys(data.files).length){
+      state.files={...state.files,...data.files};
+      renderFileTree();buildPreview();btnDownload.classList.remove('hidden');toast('Generated '+Object.keys(data.files).length+' files','ok');setStatus('Generated','ok',5000);
+      if(data.tokensUsed&&statusTokens)statusTokens.textContent=data.tokensUsed+' tokens';
+      loadProject(state.currentProject); // reload to get proper folder structure
+    }
     if(data.warning)toast(data.warning,data.warning.includes('insufficient')?'error':'warning');
     promptInput.value='';
   }catch(e){toast('Error: '+e.message,'error');setStatus('Error','error')}finally{loadingOverlay.classList.add('hidden')}
@@ -484,8 +548,8 @@ function openFile(key){
 }
 
 function renderLineNums(code){lineNums.innerHTML=code.split('\n').map((_,i)=>'<span>'+(i+1)+'</span>').join('')}
-function deleteFile(key){if(!confirm('Delete '+key+'?'))return;delete state.files[key];if(state.currentFile===key)state.currentFile=null;renderFileTree();buildPreview();toast('Deleted','info')}
-function handleUpload(e){Array.from(e.target.files).forEach(file=>{const reader=new FileReader();reader.onload=ev=>{state.files[file.name]=ev.target.result;renderFileTree();buildPreview();toast('Uploaded '+file.name,'ok')};reader.readAsText(file)});e.target.value=''}
+function deleteFile(key){if(!confirm('Delete '+key+'?'))return;delete state.files[key];if(state.currentFile===key)state.currentFile=null;deleteFileFromServer(key);renderFileTree();buildPreview();toast('Deleted','info')}
+function handleUpload(e){Array.from(e.target.files).forEach(file=>{const reader=new FileReader();reader.onload=ev=>{state.files[file.name]=ev.target.result;saveFileToServer(file.name,ev.target.result);renderFileTree();buildPreview();toast('Uploaded '+file.name,'ok')};reader.readAsText(file)});e.target.value=''}
 function closeEditor(){codeEditor.classList.add('hidden');codeContent.classList.remove('hidden');btnEdit.classList.remove('hidden');btnSave.classList.add('hidden')}
 
 function highlight(code,filename){
@@ -496,6 +560,12 @@ function highlight(code,filename){
 }
 
 function buildPreview(){
+  if(state.currentProject){
+    previewPlaceholder.classList.add('hidden');
+    previewFrame.src=`/preview/${state.currentProject}/index.html`;
+    previewFrame.onload=()=>previewFrame.classList.add('loaded');
+    return;
+  }
   const html=state.files['index.html'];if(!html){previewFrame.classList.remove('loaded');previewPlaceholder.classList.remove('hidden');return}
   previewPlaceholder.classList.add('hidden');let full=html;
   const st=state.files['style.css']?'<style>'+state.files['style.css']+'</style>':'';const sc=state.files['script.js']?'<script>'+state.files['script.js']+'<\/script>':'';

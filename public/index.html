@@ -157,7 +157,7 @@
       <div class="sidebar-section">
         <div class="sidebar-section-header" id="sidebarProjectHeader">
           <svg class="chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M3 2l4 3-4 3" fill="currentColor"/></svg>
-          <span>WEBFORGE PROJECT</span>
+          <span id="currentProjectName">NO PROJECT OPEN</span>
           <div class="sidebar-section-actions">
             <button class="sb-btn" id="btnNewFile" title="New File...">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 3H4v10h8V3zM8 6v4M6 8h4" stroke="currentColor" stroke-width="1.2"/></svg>
@@ -399,6 +399,9 @@
 
 <!-- FILE MENU DROPDOWN -->
 <div class="context-menu hidden" id="fileMenu">
+  <button class="ctx-item" data-action="newProject">New Project</button>
+  <button class="ctx-item" data-action="openProject">Open Project</button>
+  <div class="ctx-sep"></div>
   <button class="ctx-item" data-action="newFile">New File <span class="ctx-shortcut">Ctrl+N</span></button>
   <button class="ctx-item" data-action="newFolder">New Folder</button>
   <div class="ctx-sep"></div>
@@ -429,7 +432,7 @@
   <div class="ctx-sep"></div>
   <button class="ctx-item" onclick="document.querySelector('.preview-panel').style.display=document.querySelector('.preview-panel').style.display==='none'?'flex':'none'">Toggle Preview</button>
   <div class="ctx-sep"></div>
-  <button class="ctx-item" onclick="document.body.requestFullscreen?.()">Full Screen <span class="ctx-shortcut">F11</span></button>
+  <button class="ctx-item" onclick="document.body.requestFullscreen?.(); setTimeout(() => window.dispatchEvent(new Event('resize')), 500)">Full Screen <span class="ctx-shortcut">F11</span></button>
 </div>
 
 <!-- HELP MENU -->

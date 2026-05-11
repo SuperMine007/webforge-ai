@@ -8,6 +8,12 @@ const os = require('os');
 const pty = require('node-pty');
 const WebSocket = require('ws');
 const http = require('http');
+const fs = require('fs');
+
+const WORKSPACE_DIR = path.join(__dirname, 'webpage-ai-work');
+if (!fs.existsSync(WORKSPACE_DIR)) {
+  fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -29,12 +35,21 @@ wss.on('connection', (ws, req) => {
     else if (shellType === 'bash') shell = 'bash.exe';
   }
 
+  let ptyCwd = process.cwd();
+  const cwdParam = url.searchParams.get('cwd');
+  if (cwdParam) {
+    const targetPath = path.join(WORKSPACE_DIR, cwdParam);
+    if (fs.existsSync(targetPath)) {
+      ptyCwd = targetPath;
+    }
+  }
+
   try {
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-color',
       cols: 80,
       rows: 24,
-      cwd: process.cwd(),
+      cwd: ptyCwd,
       env: process.env
     });
 
@@ -66,6 +81,100 @@ app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/preview', express.static(WORKSPACE_DIR));
+
+// File System APIs
+app.get('/api/projects', (req, res) => {
+  try {
+    const items = fs.readdirSync(WORKSPACE_DIR, { withFileTypes: true });
+    const projects = items.filter(i => i.isDirectory()).map(i => i.name);
+    res.json({ projects });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/projects/new', (req, res) => {
+  const { name } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Name required' });
+  try {
+    const p = path.join(WORKSPACE_DIR, name);
+    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+    res.json({ success: true, name });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+function getAllFiles(dirPath, arrayOfFiles = [], baseDir = '') {
+  const files = fs.readdirSync(dirPath);
+  files.forEach(file => {
+    if (fs.statSync(dirPath + "/" + file).isDirectory()) {
+      arrayOfFiles = getAllFiles(dirPath + "/" + file, arrayOfFiles, baseDir);
+    } else {
+      const fullPath = path.join(dirPath, file);
+      const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+      arrayOfFiles.push(relPath);
+    }
+  });
+  return arrayOfFiles;
+}
+
+app.get('/api/files', (req, res) => {
+  const { project } = req.query;
+  if (!project) return res.status(400).json({ error: 'Project required' });
+  const projDir = path.join(WORKSPACE_DIR, project);
+  if (!fs.existsSync(projDir)) return res.json({ files: {} });
+  
+  try {
+    const fileList = getAllFiles(projDir, [], projDir);
+    const files = {};
+    for (const file of fileList) {
+      files[file] = fs.readFileSync(path.join(projDir, file), 'utf8');
+    }
+    res.json({ files });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/files/save', (req, res) => {
+  const { project, files } = req.body || {};
+  if (!project || !files || typeof files !== 'object') return res.status(400).json({ error: 'Invalid input' });
+  
+  const projDir = path.join(WORKSPACE_DIR, project);
+  try {
+    if (!fs.existsSync(projDir)) fs.mkdirSync(projDir, { recursive: true });
+    for (const [filepath, content] of Object.entries(files)) {
+      const fullPath = path.join(projDir, filepath);
+      const dir = path.dirname(fullPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(fullPath, content || '', 'utf8');
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/files/delete', (req, res) => {
+  const { project, filepath } = req.body || {};
+  if (!project || !filepath) return res.status(400).json({ error: 'Invalid input' });
+  
+  const targetPath = path.join(WORKSPACE_DIR, project, filepath);
+  try {
+    if (fs.existsSync(targetPath)) {
+      if (fs.statSync(targetPath).isDirectory()) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(targetPath);
+      }
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Token Management - Optimized for OpenRouter Free Accounts
 const TOKEN_LIMITS = {
@@ -213,9 +322,9 @@ app.get('/credits', (req, res) => {
   }).catch(() => res.json({ usage: 0, limit: null }));
 });
 
-app.get('/nim-models', (req, res) => {
+app.get('/nim-models', async (req, res) => {
   const nimKey = process.env.NVIDIA_API_KEY;
-  const models = [
+  const fallbackModels = [
     { id: 'meta/llama-3.1-405b-instruct', name: 'Llama 3.1 405B Instruct' },
     { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B Instruct' },
     { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B Instruct' },
@@ -226,7 +335,27 @@ app.get('/nim-models', (req, res) => {
     { id: 'deepseek-ai/deepseek-v3', name: 'DeepSeek V3' },
     { id: 'deepseek-ai/deepseek-r1', name: 'DeepSeek R1' }
   ];
-  res.json({ models });
+  
+  if (!nimKey) return res.json({ models: fallbackModels });
+  
+  try {
+    const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
+      headers: { 'Authorization': `Bearer ${nimKey}` }
+    });
+    if (!r.ok) return res.json({ models: fallbackModels });
+    const data = await r.json();
+    if (data && data.data && data.data.length > 0) {
+      const models = data.data.map(m => ({
+        id: m.id,
+        name: m.id
+      })).sort((a, b) => a.name.localeCompare(b.name));
+      res.json({ models });
+    } else {
+      res.json({ models: fallbackModels });
+    }
+  } catch (e) {
+    res.json({ models: fallbackModels });
+  }
 });
 
 app.get('/recommendations', (req, res) => {
@@ -237,7 +366,7 @@ app.get('/recommendations', (req, res) => {
 });
 
 app.post('/generate', async (req, res) => {
-  const { prompt, model, provider, tokenMode, manualTokens } = req.body || {};
+  const { prompt, model, provider, tokenMode, manualTokens, project } = req.body || {};
   if (!prompt?.trim()) return res.status(400).json({ error: 'Prompt required' });
   if (!model?.trim()) return res.status(400).json({ error: 'Model required' });
 
@@ -365,6 +494,16 @@ app.post('/generate', async (req, res) => {
 
   try {
     const result = await doGenerate(maxTokens);
+    if (project && result.files) {
+      const projDir = path.join(WORKSPACE_DIR, project);
+      if (!fs.existsSync(projDir)) fs.mkdirSync(projDir, { recursive: true });
+      for (const [filepath, content] of Object.entries(result.files)) {
+        const fullPath = path.join(projDir, filepath);
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(fullPath, content || '', 'utf8');
+      }
+    }
     res.json(result);
   } catch (e) {
     res.json({ files: makeFallback(), warning: e.message });
