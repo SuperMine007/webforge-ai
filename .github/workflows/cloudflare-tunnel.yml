@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "Starting Cloudflare Tunnel..."
           # Start tunnel and extract the URL
-          cloudflared tunnel --url http://localhost:3000 > cloudflared.log 2>&1 &
+          cloudflared tunnel --url http://127.0.0.1:3000 > cloudflared.log 2>&1 &
           sleep 10
           echo "=========================================================="
           echo "WebForge AI is live at:"
