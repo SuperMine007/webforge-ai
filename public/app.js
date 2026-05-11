@@ -1,9 +1,9 @@
 'use strict';
-const state={files:{},currentFile:null,models:[],selectedModel:'anthropic/claude-3.5-sonnet',tokenMode:'auto',manualTokens:4000,opencodeApiKey:null,opencodeConnected:false,opencodeHistory:[],modelTier:'default',currentProvider:'openrouter',folders:{},terminals:[{id:1,name:'pwsh',output:[]}],activeTerminal:1,terminalCounter:1};
+const state={files:{},currentFile:null,models:[],selectedModel:'anthropic/claude-3.5-sonnet',tokenMode:'auto',manualTokens:4000,opencodeApiKey:null,opencodeConnected:false,opencodeHistory:[],modelTier:'default',currentProvider:'openrouter',folders:{},terminals:[{id:1,name:'pwsh',ws:null,term:null,fitAddon:null}],activeTerminal:1,terminalCounter:1};
 const $=id=>document.getElementById(id),$$=sel=>document.querySelectorAll(sel);
 
 // DOM refs
-const promptInput=$('promptInput'),btnGenerate=$('btnGenerate'),btnToken=$('btnToken'),tokenLabel=$('tokenLabel'),tokenDropdown=$('tokenDropdown'),tokenSelect=$('tokenSelect'),btnModel=$('btnModel'),modelName=$('modelName'),modelDropdown=$('modelDropdown'),modelSearch=$('modelSearch'),freeOnly=$('freeOnly'),modelList=$('modelList'),modelManual=$('modelManual'),providerSelect=$('providerSelect'),btnClear=$('btnClear'),btnDownload=$('btnDownload'),fileTree=$('fileTree'),fileTab=$('fileTab'),lineNums=$('lineNums'),codeContent=$('codeContent'),codeEditor=$('codeEditor'),btnEdit=$('btnEdit'),btnSave=$('btnSave'),btnCopy=$('btnCopy'),previewFrame=$('previewFrame'),previewPlaceholder=$('previewPlaceholder'),previewBody=$('previewBody'),btnRefresh=$('btnRefresh'),btnNewTab=$('btnNewTab'),statusBar=$('statusBar'),statusText=$('statusText'),statusTokens=$('statusTokens'),statusCredits=$('statusCredits'),statusTier=$('statusTier'),loadingOverlay=$('loadingOverlay'),toastContainer=$('toastContainer'),terminalOutput=$('terminalOutput'),terminalInput=$('terminalInput'),btnNewFile=$('btnNewFile'),btnNewFolder=$('btnNewFolder'),btnUpload=$('btnUpload'),fileInput=$('fileInput'),manualTokenSection=$('manualTokenSection'),manualTokenInput=$('manualTokenInput'),tokenManualMin=$('tokenManualMin'),tokenManualMax=$('tokenManualMax'),tokenManualRec=$('tokenManualRec'),modelDropdownHeader=$('modelDropdownHeader'),panelArea=$('panelArea'),breadcrumbFile=$('breadcrumbFile'),statusLang=$('statusLang'),fileMenu=$('fileMenu');
+const promptInput=$('promptInput'),btnGenerate=$('btnGenerate'),btnToken=$('btnToken'),tokenLabel=$('tokenLabel'),tokenDropdown=$('tokenDropdown'),tokenSelect=$('tokenSelect'),btnModel=$('btnModel'),modelName=$('modelName'),modelDropdown=$('modelDropdown'),modelSearch=$('modelSearch'),freeOnly=$('freeOnly'),modelList=$('modelList'),modelManual=$('modelManual'),providerSelect=$('providerSelect'),btnClear=$('btnClear'),btnDownload=$('btnDownload'),fileTree=$('fileTree'),fileTab=$('fileTab'),lineNums=$('lineNums'),codeContent=$('codeContent'),codeEditor=$('codeEditor'),btnEdit=$('btnEdit'),btnSave=$('btnSave'),btnCopy=$('btnCopy'),previewFrame=$('previewFrame'),previewPlaceholder=$('previewPlaceholder'),previewBody=$('previewBody'),btnRefresh=$('btnRefresh'),btnNewTab=$('btnNewTab'),statusBar=$('statusBar'),statusText=$('statusText'),statusTokens=$('statusTokens'),statusCredits=$('statusCredits'),statusTier=$('statusTier'),loadingOverlay=$('loadingOverlay'),toastContainer=$('toastContainer'),terminalContainer=$('terminalContainer'),opencodeInput=$('opencodeInput'),btnNewFile=$('btnNewFile'),btnNewFolder=$('btnNewFolder'),btnUpload=$('btnUpload'),fileInput=$('fileInput'),manualTokenSection=$('manualTokenSection'),manualTokenInput=$('manualTokenInput'),tokenManualMin=$('tokenManualMin'),tokenManualMax=$('tokenManualMax'),tokenManualRec=$('tokenManualRec'),modelDropdownHeader=$('modelDropdownHeader'),panelArea=$('panelArea'),breadcrumbFile=$('breadcrumbFile'),statusLang=$('statusLang'),fileMenu=$('fileMenu');
 
 function init(){
   loadModels();loadCredits();loadRecommendations();
@@ -66,7 +66,8 @@ function init(){
     if(p==='terminal'){
       panelArea.classList.remove('hidden');panelArea.style.height='100%';
       if(sidebar)sidebar.style.display='none';
-      terminalInput.focus();
+      const t=state.terminals.find(x=>x.id===state.activeTerminal);
+      if(t&&t.term)t.term.focus();
     } else if(p==='sidebar'){
       if(sidebar){sidebar.classList.add('mob-visible');sidebar.style.display='flex'}
     } else if(p==='code'){
@@ -84,8 +85,13 @@ function init(){
   $('btnNewTerminal')?.addEventListener('click',()=>createTerminal());
   $('btnSplitTerminal')?.addEventListener('click',()=>createTerminal());
   $('btnKillTerminal')?.addEventListener('click',()=>killActiveTerminal());
-  $('btnMaxPanel')?.addEventListener('click',()=>{const h=panelArea.style.height;panelArea.style.height=(h==='100%')?'250px':'100%'});
-  terminalInput.addEventListener('keydown',handleTerminalInput);
+  $('btnMaxPanel')?.addEventListener('click',()=>{
+    const h=panelArea.style.height;
+    panelArea.style.height=(h==='100%')?'250px':'100%';
+    const t=state.terminals.find(x=>x.id===state.activeTerminal);
+    if(t&&t.fitAddon) setTimeout(()=>t.fitAddon.fit(), 50);
+  });
+  if(opencodeInput)opencodeInput.addEventListener('keydown',handleOpencodeInput);
 
   // Shell select
   const shellSelect=$('terminalShellSelect');
@@ -95,7 +101,10 @@ function init(){
     if(t){
       t.shellType=v;
       t.name={powershell:'pwsh',cmd:'cmd',bash:'bash',opencode:'ai'}[v]||v;
-      if(v!=='opencode'){terminalOutput.innerHTML='';addTerminalLine('Switched to '+(v==='bash'?'Git Bash':v),'info');}
+      if(v!=='opencode'){
+        if(t.term) t.term.write(`\r\nSwitching to ${v}...\r\n`);
+        initTerminal(t.id, v);
+      }
     }
     applyTerminalShellUI(v);
     renderTerminalInstances();
@@ -107,9 +116,13 @@ function init(){
     const ptab=tab.dataset.ptab;
     const pc=document.querySelector('.panel-content');
     if(pc)pc.style.display='flex';
-    if(ptab==='problems'){terminalOutput.innerHTML='';addTerminalLine('No problems detected.','success')}
-    else if(ptab==='output'){terminalOutput.innerHTML='';addTerminalLine('Output channel active.','info')}
-    else{restoreTerminalOutput()}
+    if(ptab!=='terminal'){
+      terminalContainer.style.display='none';
+    } else {
+      terminalContainer.style.display='block';
+      const t=state.terminals.find(x=>x.id===state.activeTerminal);
+      if(t&&t.term)t.term.focus();
+    }
   }));
 
   // File menu
@@ -210,11 +223,13 @@ function init(){
   if(window.innerWidth<=768){
     document.querySelector('.code-panel')?.classList.add('mob-visible');
     document.querySelector('.sidebar').style.display='none';
-    // Set Code tab as active on mobile
     $$('.mob-tab').forEach(t=>{t.classList.remove('active');if(t.dataset.panel==='code')t.classList.add('active')});
   }
 
   setStatus('Ready');
+  
+  // Initialize first terminal
+  setTimeout(() => initTerminal(state.terminals[0].id), 100);
 }
 
 function setupMenu(btnId,menuEl){
@@ -231,69 +246,125 @@ function setupMenu(btnId,menuEl){
 }
 function closeAllMenus(){$$('.context-menu').forEach(m=>m.classList.add('hidden'))}
 
-function togglePanel(){panelArea.classList.toggle('hidden');if(!panelArea.classList.contains('hidden')){panelArea.style.height='250px';terminalInput.focus()}}
+function togglePanel(){
+  panelArea.classList.toggle('hidden');
+  if(!panelArea.classList.contains('hidden')){
+    panelArea.style.height='250px';
+    const t=state.terminals.find(x=>x.id===state.activeTerminal);
+    if(t&&t.fitAddon) {
+      setTimeout(() => { t.fitAddon.fit(); t.term.focus(); }, 50);
+    }
+  }
+}
 
 // Multi-terminal management
 function applyTerminalShellUI(type){
   const ui=$('opencodeUi');
   if(type==='opencode'){
     ui?.classList.remove('hidden');
-    $('opencodeInput')?.focus();
+    terminalContainer.style.display='none';
+    if(opencodeInput)opencodeInput.focus();
   } else {
     ui?.classList.add('hidden');
-    terminalInput.focus();
+    terminalContainer.style.display='block';
+    const t=state.terminals.find(x=>x.id===state.activeTerminal);
+    if(t&&t.term)t.term.focus();
   }
 }
 
+function initTerminal(id, shellType='powershell') {
+  let t = state.terminals.find(x=>x.id===id);
+  if(!t) return;
+  
+  if(t.ws) t.ws.close();
+  if(t.term) t.term.dispose();
+  
+  t.term = new Terminal({
+    theme: { background: '#1e1e1e', foreground: '#cccccc' },
+    fontFamily: 'Consolas, "Courier New", monospace',
+    fontSize: 13,
+    cursorBlink: true
+  });
+  
+  t.fitAddon = new FitAddon.FitAddon();
+  t.term.loadAddon(t.fitAddon);
+  
+  t.term.open(terminalContainer);
+  t.fitAddon.fit();
+  
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  t.ws = new WebSocket(`${protocol}//${location.host}/pty?shell=${shellType}`);
+  
+  t.ws.onopen = () => {
+    t.term.onData(data => {
+      if(t.ws.readyState === WebSocket.OPEN) t.ws.send(data);
+    });
+  };
+  
+  t.ws.onmessage = (ev) => {
+    t.term.write(ev.data);
+  };
+  
+  window.addEventListener('resize', () => {
+    if(state.activeTerminal === t.id && t.fitAddon && !panelArea.classList.contains('hidden')) {
+      t.fitAddon.fit();
+    }
+  });
+}
+
 function createTerminal(){
-  // Save current terminal output
-  saveTerminalOutput();
+  state.terminals.forEach(t=>{if(t.term&&t.id!==state.activeTerminal)terminalContainer.innerHTML=''});
   state.terminalCounter++;
   const shellSelect=$('terminalShellSelect');
   const type=shellSelect?shellSelect.value:'powershell';
   const shellName={powershell:'pwsh',cmd:'cmd',bash:'bash',opencode:'ai'}[type]||'pwsh';
-  const t={id:state.terminalCounter,name:shellName+' '+state.terminalCounter,output:'',shellType:type};
+  const t={id:state.terminalCounter,name:shellName+' '+state.terminalCounter,shellType:type,ws:null,term:null,fitAddon:null};
   state.terminals.push(t);
   state.activeTerminal=t.id;
-  terminalOutput.innerHTML='';
-  if(type!=='opencode')addTerminalLine('New terminal session #'+t.id+' started','info');
+  
+  terminalContainer.innerHTML='';
   applyTerminalShellUI(type);
+  if(type!=='opencode') initTerminal(t.id, type);
   renderTerminalInstances();
 }
 
 function killActiveTerminal(){
+  const t = state.terminals.find(x=>x.id===state.activeTerminal);
+  if(t) {
+    if(t.ws) t.ws.close();
+    if(t.term) t.term.dispose();
+  }
+  
   if(state.terminals.length<=1){
-    terminalOutput.innerHTML='';
-    addTerminalLine('Terminal cleared.','warning');
+    toast('Cannot kill the only terminal','warning');
+    if(!t.term) initTerminal(t.id);
     return;
   }
-  state.terminals=state.terminals.filter(t=>t.id!==state.activeTerminal);
+  state.terminals=state.terminals.filter(x=>x.id!==state.activeTerminal);
   state.activeTerminal=state.terminals[state.terminals.length-1].id;
-  restoreTerminalOutput();
-  renderTerminalInstances();
+  
+  terminalContainer.innerHTML='';
+  switchTerminal(state.activeTerminal);
   toast('Terminal killed','info');
 }
 
-function saveTerminalOutput(){
-  const t=state.terminals.find(t=>t.id===state.activeTerminal);
-  if(t)t.output=terminalOutput.innerHTML;
-}
-
-function restoreTerminalOutput(){
-  const t=state.terminals.find(t=>t.id===state.activeTerminal);
-  if(t)terminalOutput.innerHTML=t.output||'';
-}
-
 function switchTerminal(id){
-  saveTerminalOutput();
   state.activeTerminal=id;
-  restoreTerminalOutput();
   renderTerminalInstances();
   const t=state.terminals.find(x=>x.id===id);
   if(t){
     const shellSelect=$('terminalShellSelect');
     if(shellSelect)shellSelect.value=t.shellType||'powershell';
     applyTerminalShellUI(t.shellType||'powershell');
+    
+    terminalContainer.innerHTML='';
+    if(t.shellType!=='opencode') {
+      if(!t.term) initTerminal(t.id, t.shellType);
+      else {
+        t.term.open(terminalContainer);
+        setTimeout(() => { if(t.fitAddon) {t.fitAddon.fit(); t.term.focus();} }, 50);
+      }
+    }
   }
 }
 
@@ -438,43 +509,31 @@ async function downloadZip(){
   try{const res=await fetch('/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:state.files})});const blob=await res.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='project.zip';a.click();toast('Downloaded ZIP','ok')}catch(e){toast('Download failed','error')}
 }
 
-function addTerminalLine(text,type='output',isHtml=false){
-  const div=document.createElement('div');
-  if(isHtml){div.innerHTML=text}else{div.className='t-line '+({'output':'t-output','info':'t-info','error':'t-error','success':'t-success','warning':'t-warning','cmd':'t-cmd','stderr':'t-stderr'}[type]||'t-output');div.textContent=text}
-  terminalOutput.appendChild(div);terminalOutput.scrollTop=terminalOutput.scrollHeight;
-}
-
-async function handleTerminalInput(e){
-  if(e.key!=='Enter')return;const cmd=terminalInput.value.trim();if(!cmd)return;terminalInput.value='';
-  addTerminalLine('❯ '+cmd,'cmd');
-  if(cmd==='clear'){terminalOutput.innerHTML='';return}
-  if(cmd==='help'){addTerminalLine('WebForge Terminal Help','info');addTerminalLine('─'.repeat(40),'info');addTerminalLine('/connect <api-key> - Connect to OpenCode','info');addTerminalLine('opencode - Launch OpenCode assistant','info');addTerminalLine('clear - Clear terminal','info');addTerminalLine('help - Show help','info');addTerminalLine('exit - Close panel','info');addTerminalLine('─'.repeat(40),'info');addTerminalLine('Shell: ls, cd, cat, node, npm, etc.','info');return}
-  if(cmd==='opencode'){addTerminalLine('OpenCode mode ready!','success');addTerminalLine('Use /connect <your-api-key> to authenticate','info');return}
-  if(cmd==='exit'){panelArea.classList.add('hidden');return}
+async function handleOpencodeInput(e){
+  if(e.key!=='Enter')return;const cmd=opencodeInput.value.trim();if(!cmd)return;opencodeInput.value='';
+  
   if(cmd.startsWith('/connect ')){
-    const apiKey=cmd.substring(9).trim();if(!apiKey){addTerminalLine('Usage: /connect <your-api-key>','error');return}
-    addTerminalLine('Connecting to OpenCode...','info');
+    const apiKey=cmd.substring(9).trim();if(!apiKey){toast('Usage: /connect <your-api-key>','warning');return}
+    toast('Connecting to OpenCode...','info');
     try{const res=await fetch('/opencode/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey})});const data=await res.json();
-      if(res.ok&&data.success){state.opencodeApiKey=apiKey;state.opencodeConnected=true;state.opencodeHistory=[];addTerminalLine('Connected to OpenCode!','success');addTerminalLine('Now type your request or question','info')}else{addTerminalLine(data.error||'Connection failed','error')}
-    }catch(ex){addTerminalLine('Connection error: '+ex.message,'error')}return;
+      if(res.ok&&data.success){state.opencodeApiKey=apiKey;state.opencodeConnected=true;state.opencodeHistory=[];toast('Connected to OpenCode!','success');}else{toast(data.error||'Connection failed','error')}
+    }catch(ex){toast('Connection error: '+ex.message,'error')}return;
   }
   if(state.opencodeConnected){
-    addTerminalLine('Sending to OpenCode...','info');state.opencodeHistory.push({role:'user',content:cmd});
-    try{const res=await fetch('/opencode/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey:state.opencodeApiKey,messages:[{role:'system',content:'You are a helpful coding assistant. Help with code questions, file creation, and general programming tasks.'},...state.opencodeHistory]})});
-      const reader=res.body.getReader();const decoder=new TextDecoder();let responseText='',buffer='';
-      const responseDiv=document.createElement('div');responseDiv.className='t-line t-output t-streaming';terminalOutput.appendChild(responseDiv);
-      while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();
-        for(const line of lines){if(line.startsWith('data: ')){try{const data=JSON.parse(line.slice(6));if(data.error){addTerminalLine('OpenCode error: '+data.error,'error');state.opencodeHistory.pop();return}if(data.chunk){responseText+=data.chunk;responseDiv.textContent=responseText;terminalOutput.scrollTop=terminalOutput.scrollHeight}if(data.done)responseDiv.classList.remove('t-streaming')}catch(ex){}}}}
-      if(responseText)state.opencodeHistory.push({role:'assistant',content:responseText});else{state.opencodeHistory.pop();addTerminalLine('No response','warning')}
-    }catch(ex){addTerminalLine('Error: '+ex.message,'error');state.opencodeHistory.pop()}return;
+    toast('Sending to OpenCode...','info');state.opencodeHistory.push({role:'user',content:cmd});
+    try{const res=await fetch('/opencode/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey:state.opencodeApiKey,messages:[{role:'system',content:'You are a helpful coding assistant. Help with code questions, file creation, and general programming tasks.'},...state.opencodeHistory]})});
+      const data=await res.json();
+      if(data.content) {
+        state.opencodeHistory.push({role:'assistant',content:data.content});
+        toast('Response received, check preview or chat logs. (Chat log UI not fully implemented here yet)','ok');
+      } else {
+        toast('No response from OpenCode','warning');
+        state.opencodeHistory.pop();
+      }
+    }catch(ex){toast('Error: '+ex.message,'error');state.opencodeHistory.pop()}return;
+  } else {
+    toast('Not connected. Use /connect <api-key>','warning');
   }
-  addTerminalLine('Executing...','info');
-  try{const res=await fetch('/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd,stream:true})});
-    const reader=res.body.getReader();const decoder=new TextDecoder();let buffer='';
-    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();
-      for(const line of lines){if(line.startsWith('data: ')){try{const data=JSON.parse(line.slice(6));if(data.type==='stdout')addTerminalLine(data.data,'output');else if(data.type==='stderr')addTerminalLine(data.data,'stderr');else if(data.type==='error')addTerminalLine(data.data,'error')}catch(ex){}}}}
-    if(buffer.startsWith('data: ')){try{const data=JSON.parse(buffer.slice(6));if(data.type==='done'&&data.exitCode!==0)addTerminalLine('Exit code: '+data.exitCode,'warning')}catch(ex){}}
-  }catch(ex){addTerminalLine('Error: '+ex.message,'error')}
 }
 
 function setStatus(msg,type='',duration=0){statusText.textContent=msg;statusBar.className='status-bar '+(type||'');if(duration)setTimeout(()=>{if(statusText.textContent===msg)setStatus('Ready')},duration)}

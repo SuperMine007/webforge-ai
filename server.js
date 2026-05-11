@@ -4,10 +4,62 @@ const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
 const { spawn } = require('child_process');
+const os = require('os');
+const pty = require('node-pty');
+const WebSocket = require('ws');
+const http = require('http');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// WebSocket Server for PTY
+const wss = new WebSocket.Server({ server, path: '/pty' });
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const shellType = url.searchParams.get('shell') || 'powershell';
+  
+  let shell = 'powershell.exe';
+  if (os.platform() !== 'win32') {
+    shell = 'bash';
+  } else {
+    if (shellType === 'cmd') shell = 'cmd.exe';
+    else if (shellType === 'bash') shell = 'bash.exe';
+  }
+
+  try {
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      env: process.env
+    });
+
+    ptyProcess.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    });
+
+    ws.on('message', (msg) => {
+      ptyProcess.write(msg);
+    });
+
+    ws.on('close', () => {
+      try {
+        ptyProcess.kill();
+      } catch (e) {}
+    });
+  } catch (err) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(`\r\nFailed to start shell: ${err.message}\r\n`);
+      ws.close();
+    }
+  }
+});
 
 // Trust proxy headers (important for Cloudflare tunnel)
 app.set('trust proxy', 1);
@@ -719,7 +771,7 @@ app.post('/download', (req, res) => {
   res.send(Buffer.concat([...parts, ...cd, eocd]));
 });
 
-app.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, () => {
   console.log(`WebForge AI starting...`);
   console.log(`Server running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
