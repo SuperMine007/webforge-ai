@@ -3,7 +3,6 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
-const { createProxyMiddleware } = require('http-proxy-middleware');
 const { spawn } = require('child_process');
 const os = require('os');
 const pty = require('node-pty');
@@ -27,7 +26,7 @@ const wss = new WebSocket.Server({ server, path: '/pty' });
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const shellType = url.searchParams.get('shell') || 'powershell';
-  
+
   let shell = 'powershell.exe';
   if (os.platform() !== 'win32') {
     shell = 'bash';
@@ -67,7 +66,7 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => {
       try {
         ptyProcess.kill();
-      } catch (e) {}
+      } catch (e) { }
     });
   } catch (err) {
     if (ws.readyState === WebSocket.OPEN) {
@@ -141,7 +140,7 @@ app.get('/api/files', (req, res) => {
   if (!project) return res.status(400).json({ error: 'Project required' });
   const projDir = path.join(WORKSPACE_DIR, project);
   if (!fs.existsSync(projDir)) return res.json({ files: {} });
-  
+
   try {
     const fileList = getAllFiles(projDir, [], projDir);
     const files = {};
@@ -157,7 +156,7 @@ app.get('/api/files', (req, res) => {
 app.post('/api/files/save', (req, res) => {
   const { project, files } = req.body || {};
   if (!project || !files || typeof files !== 'object') return res.status(400).json({ error: 'Invalid input' });
-  
+
   const projDir = path.join(WORKSPACE_DIR, project);
   try {
     if (!fs.existsSync(projDir)) fs.mkdirSync(projDir, { recursive: true });
@@ -176,7 +175,7 @@ app.post('/api/files/save', (req, res) => {
 app.post('/api/files/delete', (req, res) => {
   const { project, filepath } = req.body || {};
   if (!project || !filepath) return res.status(400).json({ error: 'Invalid input' });
-  
+
   const targetPath = path.join(WORKSPACE_DIR, project, filepath);
   try {
     if (fs.existsSync(targetPath)) {
@@ -235,14 +234,14 @@ function detectModelTier(model) {
 
 function getTokenLimit(mode, model, manualValue = null) {
   const m = (model || '').toLowerCase();
-  
+
   if (mode === 'manual') {
     const val = parseInt(manualValue, 10);
     if (isNaN(val) || val < 100) return 100;
     if (val > 32000) return 32000;
     return val;
   }
-  
+
   const limits = TOKEN_LIMITS[mode] || TOKEN_LIMITS.auto;
   const tier = detectModelTier(m);
   return limits[tier] || limits.default;
@@ -251,7 +250,7 @@ function getTokenLimit(mode, model, manualValue = null) {
 function getRecommendations(model) {
   const m = (model || '').toLowerCase();
   const tier = detectModelTier(m);
-  
+
   const recs = {
     free: { min: 500, max: 4000, rec: 2000 },
     gemini: { min: 500, max: 16000, rec: 3000 },
@@ -259,7 +258,7 @@ function getRecommendations(model) {
     nim: { min: 1000, max: 32000, rec: 6000 },
     default: { min: 1000, max: 32000, rec: 6000 }
   };
-  
+
   return recs[tier] || recs.default;
 }
 
@@ -298,9 +297,9 @@ function extractJSON(text) {
   if (start !== -1 && end > start) {
     try {
       return JSON.parse(text.slice(start, end + 1));
-    } catch (_) {}
+    } catch (_) { }
   }
-  try { return JSON.parse(text); } catch (_) {}
+  try { return JSON.parse(text); } catch (_) { }
   return null;
 }
 
@@ -351,9 +350,9 @@ app.get('/nim-models', async (req, res) => {
     { id: 'deepseek-ai/deepseek-v3', name: 'DeepSeek V3' },
     { id: 'deepseek-ai/deepseek-r1', name: 'DeepSeek R1' }
   ];
-  
+
   if (!nimKey) return res.json({ models: fallbackModels });
-  
+
   try {
     const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
       headers: { 'Authorization': `Bearer ${nimKey}` }
@@ -529,15 +528,15 @@ app.post('/generate', async (req, res) => {
 // OpenCode API - Real implementation
 app.post('/opencode/chat', async (req, res) => {
   const { apiKey, messages } = req.body || {};
-  
+
   if (!apiKey) {
     return res.status(400).json({ error: 'API key required' });
   }
-  
+
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Messages array required' });
   }
-  
+
   try {
     const response = await fetch('https://opencode.ai/api/chat', {
       method: 'POST',
@@ -552,18 +551,18 @@ app.post('/opencode/chat', async (req, res) => {
         max_tokens: 16000
       })
     });
-    
+
     const data = await response.json();
-    
+
     if (data.error) {
       return res.status(400).json({ error: data.error.message || 'OpenCode error' });
     }
-    
+
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
       return res.status(400).json({ error: 'No response from OpenCode' });
     }
-    
+
     res.json({ content });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -572,11 +571,11 @@ app.post('/opencode/chat', async (req, res) => {
 
 app.post('/opencode/connect', async (req, res) => {
   const { apiKey } = req.body || {};
-  
+
   if (!apiKey) {
     return res.status(400).json({ error: 'API key required' });
   }
-  
+
   // Test the API key with a simple request
   try {
     const response = await fetch('https://opencode.ai/api/chat', {
@@ -591,7 +590,7 @@ app.post('/opencode/connect', async (req, res) => {
         max_tokens: 10
       })
     });
-    
+
     if (response.ok) {
       res.json({ success: true, message: 'Connected to OpenCode!' });
     } else {
@@ -871,7 +870,7 @@ app.post('/download', (req, res) => {
   for (const [name, content] of entries) {
     const n = Buffer.from(name);
     const d = Buffer.from(content || '');
-    
+
     const header = Buffer.alloc(30);
     header.writeUInt32LE(0x04034b50, 0);
     header.writeUInt16LE(20, 4);
@@ -884,7 +883,7 @@ app.post('/download', (req, res) => {
     header.writeUInt32LE(d.length, 22);
     header.writeUInt16LE(n.length, 26);
     header.writeUInt16LE(0, 28);
-    
+
     parts.push(header, n, d);
     cdEntries.push({ name: n, data: d, offset });
     offset += 30 + n.length + d.length;
