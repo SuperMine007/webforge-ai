@@ -63,9 +63,10 @@
         </div>
       </div>
       <select id="providerSelect" class="provider-select">
+        <option value="nim" selected>NVIDIA NIM</option>
         <option value="openrouter">OpenRouter</option>
         <option value="gemini">Gemini</option>
-        <option value="nim">NVIDIA NIM</option>
+        <option value="opencode-zen">OpenCode Zen</option>
       </select>
       <div class="model-select-wrapper" style="position:relative; display:flex; align-items:center;">
         <button class="ctrl-btn" id="btnModel">
@@ -454,9 +455,14 @@
     <div class="chat-header">
       <svg width="14" height="14" viewBox="0 0 28 28" fill="none"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs><polygon points="14,2 26,22 2,22" stroke="url(#g2)" stroke-width="2" fill="none"/></svg>
       <span>AI Assistant</span>
-      <button class="chat-close" onclick="document.getElementById('chatOverlay').classList.add('hidden')">
-        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5"/></svg>
-      </button>
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+        <button class="chat-history-btn" id="btnChatHistory" title="Chat History">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM8 4v4l3 2" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <button class="chat-close" onclick="document.getElementById('chatOverlay').classList.add('hidden')">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5"/></svg>
+        </button>
+      </div>
     </div>
     <div class="chat-body" id="chatBody"></div>
   </div>

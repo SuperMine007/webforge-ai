@@ -1,13 +1,13 @@
 'use strict';
-const state={files:{},currentFile:null,currentProject:null,models:[],selectedModel:'anthropic/claude-3.5-sonnet',tokenMode:'auto',manualTokens:4000,opencodeApiKey:null,opencodeConnected:false,opencodeHistory:[],modelTier:'default',currentProvider:'openrouter',folders:{},terminals:[{id:1,name:'pwsh',ws:null,term:null,fitAddon:null}],activeTerminal:1,terminalCounter:1};
+const state={files:{},currentFile:null,currentProject:null,models:[],selectedModel:'nvidia/llama-3.1-nemotron-70b-instruct',tokenMode:'auto',manualTokens:4000,opencodeApiKey:null,opencodeConnected:false,opencodeHistory:[],modelTier:'default',currentProvider:'nim',folders:{},terminals:[{id:1,name:'pwsh',ws:null,term:null,fitAddon:null}],activeTerminal:1,terminalCounter:1,chatHistory:[]};
 const $=id=>document.getElementById(id),$$=sel=>document.querySelectorAll(sel);
 
 // DOM refs
-const promptInput=$('promptInput'),btnGenerate=$('btnGenerate'),btnToken=$('btnToken'),tokenLabel=$('tokenLabel'),tokenDropdown=$('tokenDropdown'),tokenSelect=$('tokenSelect'),btnModel=$('btnModel'),modelName=$('modelName'),modelDropdown=$('modelDropdown'),modelSearch=$('modelSearch'),freeOnly=$('freeOnly'),modelList=$('modelList'),modelManual=$('modelManual'),providerSelect=$('providerSelect'),btnClear=$('btnClear'),btnDownload=$('btnDownload'),fileTree=$('fileTree'),fileTab=$('fileTab'),lineNums=$('lineNums'),codeContent=$('codeContent'),codeEditor=$('codeEditor'),btnEdit=$('btnEdit'),btnSave=$('btnSave'),btnCopy=$('btnCopy'),previewFrame=$('previewFrame'),previewPlaceholder=$('previewPlaceholder'),previewBody=$('previewBody'),btnRefresh=$('btnRefresh'),btnNewTab=$('btnNewTab'),statusBar=$('statusBar'),statusText=$('statusText'),statusTokens=$('statusTokens'),statusCredits=$('statusCredits'),statusTier=$('statusTier'),loadingOverlay=$('loadingOverlay'),toastContainer=$('toastContainer'),terminalContainer=$('terminalContainer'),opencodeInput=$('opencodeInput'),btnNewFile=$('btnNewFile'),btnNewFolder=$('btnNewFolder'),btnUpload=$('btnUpload'),fileInput=$('fileInput'),manualTokenSection=$('manualTokenSection'),manualTokenInput=$('manualTokenInput'),tokenManualMin=$('tokenManualMin'),tokenManualMax=$('tokenManualMax'),tokenManualRec=$('tokenManualRec'),modelDropdownHeader=$('modelDropdownHeader'),panelArea=$('panelArea'),breadcrumbFile=$('breadcrumbFile'),statusLang=$('statusLang'),fileMenu=$('fileMenu');
+const promptInput=$('promptInput'),btnGenerate=$('btnGenerate'),btnToken=$('btnToken'),tokenLabel=$('tokenLabel'),tokenDropdown=$('tokenDropdown'),tokenSelect=$('tokenSelect'),btnModel=$('btnModel'),modelName=$('modelName'),modelDropdown=$('modelDropdown'),modelSearch=$('modelSearch'),freeOnly=$('freeOnly'),modelList=$('modelList'),modelManual=$('modelManual'),providerSelect=$('providerSelect'),btnClear=$('btnClear'),btnDownload=$('btnDownload'),fileTree=$('fileTree'),fileTab=$('fileTab'),lineNums=$('lineNums'),codeContent=$('codeContent'),codeEditor=$('codeEditor'),btnEdit=$('btnEdit'),btnSave=$('btnSave'),btnCopy=$('btnCopy'),previewFrame=$('previewFrame'),previewPlaceholder=$('previewPlaceholder'),previewBody=$('previewBody'),btnRefresh=$('btnRefresh'),btnNewTab=$('btnNewTab'),statusBar=$('statusBar'),statusText=$('statusText'),statusTokens=$('statusTokens'),statusCredits=$('statusCredits'),statusTier=$('statusTier'),loadingOverlay=$('loadingOverlay'),toastContainer=$('toastContainer'),terminalContainer=$('terminalContainer'),opencodeInput=$('opencodeInput'),btnNewFile=$('btnNewFile'),btnNewFolder=$('btnNewFolder'),btnUpload=$('btnUpload'),fileInput=$('fileInput'),manualTokenSection=$('manualTokenSection'),manualTokenInput=$('manualTokenInput'),tokenManualMin=$('tokenManualMin'),tokenManualMax=$('tokenManualMax'),tokenManualRec=$('tokenManualRec'),modelDropdownHeader=$('modelDropdownHeader'),panelArea=$('panelArea'),breadcrumbFile=$('breadcrumbFile'),statusLang=$('statusLang'),fileMenu=$('fileMenu'),chatOverlay=$('chatOverlay'),chatBody=$('chatBody'),previewPortInput=$('previewPortInput'),folderInput=$('folderInput'),btnChatHistory=$('btnChatHistory');
 
 function init(){
-  loadModels();loadCredits();loadRecommendations();
-  providerSelect.addEventListener('change',()=>loadModels());
+  loadModels();loadCredits();loadRecommendations();updateTokenVisibility();
+  providerSelect.addEventListener('change',()=>{loadModels();updateTokenVisibility();});
   btnGenerate.addEventListener('click',generate);
   promptInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();generate()}});
 
@@ -480,7 +480,19 @@ function createNewFolder(){
 async function loadModels(){
   const provider=providerSelect.value;state.currentProvider=provider;
   if(provider==='nim'){try{const res=await fetch('/nim-models');const data=await res.json();state.models=data.models||[];if(state.models.length>0){state.selectedModel=state.models[0].id;modelName.textContent=state.selectedModel}renderModels();setStatus(state.models.length+' NIM models loaded','ok',3000)}catch(e){setStatus('NIM model load failed','error')}return}
+  if(provider==='opencode-zen'){
+    state.models=[{id:'opencode/minimax-m2.5-free',name:'Minimax M2.5 Free'},{id:'opencode/minimax-m2.7',name:'Minimax M2.7'}];
+    state.selectedModel='opencode/minimax-m2.7';
+    modelName.textContent=state.selectedModel;
+    renderModels();setStatus('OpenCode Zen models loaded','ok',3000);return;
+  }
   try{const res=await fetch('/models');const data=await res.json();state.models=data.models||[];renderModels();setStatus(state.models.length+' models loaded','ok',3000)}catch(e){setStatus('Model load failed','error')}
+}
+
+function updateTokenVisibility(){
+  const p=providerSelect.value;
+  const hide=(p==='nim'||p==='opencode-zen');
+  if(tokenSelect)tokenSelect.style.display=hide?'none':'';
 }
 
 function renderModels(){
@@ -503,15 +515,20 @@ function selectModel(id){
 async function loadRecommendations(){try{const res=await fetch('/recommendations?model='+encodeURIComponent(state.selectedModel));const data=await res.json();if(statusTokens)statusTokens.textContent=data.rec+' tokens';if(tokenManualMin)tokenManualMin.textContent=data.min;if(tokenManualMax)tokenManualMax.textContent=data.max;if(tokenManualRec)tokenManualRec.textContent=data.rec;if(state.tokenMode==='manual'&&manualTokenInput)manualTokenInput.placeholder='Tokens (rec: '+data.rec+')'}catch(e){}}
 async function loadCredits(){try{const res=await fetch('/credits');const data=await res.json();if(data.limit){statusCredits.textContent='$'+Math.max(0,data.limit-data.usage).toFixed(2)}else{statusCredits.textContent='Free'}}catch(e){}}
 
-function addChatMessage(role, content, isThinking=false){
+function addChatMessage(role, content, isThinking=false, thinkingStage=''){
   const div=document.createElement('div');
   div.className='chat-msg '+role;
   let html=`<div class="msg-content">${content.replace(/\n/g,'<br>')}</div>`;
-  if(isThinking) html+=`<div class="msg-status"><div class="spinner-small"></div><span>Thinking...</span></div>`;
+  if(isThinking) html+=`<div class="msg-status"><div class="spinner-small"></div><span>${thinkingStage||'Thinking...'}</span></div>`;
   div.innerHTML=html;
   chatBody.appendChild(div);
   chatBody.scrollTop=chatBody.scrollHeight;
   return div;
+}
+
+function updateThinkingStage(node, stage){
+  const statusEl = node.querySelector('.msg-status span');
+  if(statusEl) statusEl.textContent = stage;
 }
 
 async function generate(){
@@ -520,29 +537,48 @@ async function generate(){
   
   setStatus('Generating...','busy');
   chatOverlay.classList.remove('hidden');
-  chatBody.innerHTML='';
+  // Don't clear chat body - keep history
   addChatMessage('user', prompt);
-  const aiMsgNode = addChatMessage('ai', 'Analyzing request...', true);
+  const aiMsgNode = addChatMessage('ai', 'Analyzing your request...', true, '🔍 Understanding prompt...');
+  
+  // Save to chat history
+  state.chatHistory.push({role:'user',content:prompt,time:new Date().toLocaleTimeString()});
   
   try{
+    // Stage 1: Understanding
+    await new Promise(r=>setTimeout(r,500));
+    updateThinkingStage(aiMsgNode, '🧠 Planning file structure...');
+    
+    await new Promise(r=>setTimeout(r,500));
+    updateThinkingStage(aiMsgNode, '✨ Generating code with ' + state.selectedModel.split('/').pop() + '...');
+    
     const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,model:state.selectedModel,provider:providerSelect.value,tokenMode:state.tokenMode,manualTokens:state.tokenMode==='manual'?state.manualTokens:null,project:state.currentProject})});
+    
+    updateThinkingStage(aiMsgNode, '📦 Processing response...');
+    
     const data=await res.json();
     aiMsgNode.querySelector('.msg-status')?.remove();
     
     if(data.files&&Object.keys(data.files).length){
+      const fileList = Object.keys(data.files);
       state.files={...state.files,...data.files};
-      aiMsgNode.querySelector('.msg-content').innerHTML=`Generated ${Object.keys(data.files).length} files.`;
-      renderFileTree();buildPreview();btnDownload.classList.remove('hidden');toast('Generated '+Object.keys(data.files).length+' files','ok');setStatus('Generated','ok',5000);
+      const resultHtml = `<strong>✅ Generated ${fileList.length} files:</strong><br><br>` + fileList.map(f => `📄 ${f}`).join('<br>');
+      aiMsgNode.querySelector('.msg-content').innerHTML = resultHtml;
+      state.chatHistory.push({role:'ai',content:`Generated ${fileList.length} files: ${fileList.join(', ')}`,time:new Date().toLocaleTimeString()});
+      renderFileTree();buildPreview();btnDownload.classList.remove('hidden');toast('Generated '+fileList.length+' files','ok');setStatus('Generated','ok',5000);
       if(data.tokensUsed&&statusTokens)statusTokens.textContent=data.tokensUsed+' tokens';
-      loadProject(state.currentProject); // reload to get proper folder structure
+      loadProject(state.currentProject);
     } else {
-      aiMsgNode.querySelector('.msg-content').innerHTML='Generation failed or no files returned.';
+      aiMsgNode.querySelector('.msg-content').innerHTML='❌ Generation failed or no files returned.';
+      if(data.warning) aiMsgNode.querySelector('.msg-content').innerHTML += '<br><small style="color:var(--text3)">'+data.warning+'</small>';
+      state.chatHistory.push({role:'ai',content:'Generation failed',time:new Date().toLocaleTimeString()});
     }
     if(data.warning)toast(data.warning,data.warning.includes('insufficient')?'error':'warning');
     promptInput.value='';
   }catch(e){
     aiMsgNode.querySelector('.msg-status')?.remove();
-    aiMsgNode.querySelector('.msg-content').innerHTML=`Error: ${e.message}`;
+    aiMsgNode.querySelector('.msg-content').innerHTML=`❌ Error: ${e.message}`;
+    state.chatHistory.push({role:'ai',content:'Error: '+e.message,time:new Date().toLocaleTimeString()});
     toast('Error: '+e.message,'error');setStatus('Error','error')
   }
 }
@@ -666,5 +702,19 @@ function toast(msg,type='info',duration=4000){
   t.innerHTML=`<svg class="toast-icon" viewBox="0 0 16 16" fill="none">${icons[type]||icons.info}</svg><div class="toast-content"><div class="toast-title">${msg}</div></div>`;
   toastContainer.appendChild(t);setTimeout(()=>t.classList.add('removing'),duration);setTimeout(()=>t.remove(),duration+300);
 }
+
+// Chat history button
+if(btnChatHistory)btnChatHistory.addEventListener('click',()=>{
+  if(!state.chatHistory.length){toast('No chat history yet','info');return;}
+  chatBody.innerHTML='';
+  state.chatHistory.forEach(entry=>{
+    const div=document.createElement('div');
+    div.className='chat-msg '+entry.role;
+    div.innerHTML=`<div class="msg-content">${entry.content.replace(/\n/g,'<br>')}</div><div class="msg-status"><span>${entry.time}</span></div>`;
+    chatBody.appendChild(div);
+  });
+  chatBody.scrollTop=chatBody.scrollHeight;
+  chatOverlay.classList.remove('hidden');
+});
 
 init();

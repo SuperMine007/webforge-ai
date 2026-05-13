@@ -84,18 +84,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/preview', express.static(WORKSPACE_DIR));
 
 // Dynamic Proxy for high-end projects (e.g. Next.js, Vite)
+// Uses dynamic import() because http-proxy-middleware v4+ is ESM-only
 app.use('/proxy/:port', (req, res, next) => {
   const port = req.params.port;
   if (!port || isNaN(port)) return next();
-  createProxyMiddleware({
-    target: `http://127.0.0.1:${port}`,
-    changeOrigin: true,
-    ws: true,
-    pathRewrite: { [`^/proxy/${port}`]: '' },
-    onError: (err, req, res) => {
-      res.status(502).send(`Proxy Error: Dev server on port ${port} might not be running. Start it in the terminal first.`);
-    }
-  })(req, res, next);
+  import('http-proxy-middleware').then(({ createProxyMiddleware }) => {
+    createProxyMiddleware({
+      target: `http://127.0.0.1:${port}`,
+      changeOrigin: true,
+      ws: true,
+      pathRewrite: { [`^/proxy/${port}`]: '' },
+      onError: (err, req, res) => {
+        res.status(502).send(`Proxy Error: Dev server on port ${port} might not be running. Start it in the terminal first.`);
+      }
+    })(req, res, next);
+  }).catch(next);
 });
 
 // File System APIs
@@ -291,6 +294,8 @@ const FALLBACK_FILES = {
 function extractJSON(text) {
   if (!text || typeof text !== 'string') return null;
   text = text.trim();
+  // If the response looks like HTML, it's an error page, not JSON
+  if (text.startsWith('<!') || text.startsWith('<html') || text.startsWith('<HTML')) return null;
   text = text.replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -389,11 +394,14 @@ app.post('/generate', async (req, res) => {
   const gmKey = process.env.GEMINI_API_KEY;
   const nimKey = process.env.NVIDIA_API_KEY;
 
+  const ocZenKey = process.env.OPENCODE_ZEN_API_KEY;
+
   if (provider === 'gemini' && !gmKey) return res.status(500).json({ error: 'No Gemini key' });
   if (provider === 'nim' && !nimKey) return res.status(500).json({ error: 'No NVIDIA API key' });
-  if (provider !== 'gemini' && provider !== 'nim' && !orKey) return res.status(500).json({ error: 'No OpenRouter key' });
+  if (provider === 'opencode-zen' && !ocZenKey) return res.status(500).json({ error: 'No OpenCode Zen API key. Add OPENCODE_ZEN_API_KEY to your secrets.' });
+  if (provider !== 'gemini' && provider !== 'nim' && provider !== 'opencode-zen' && !orKey) return res.status(500).json({ error: 'No OpenRouter key' });
 
-  const maxTokens = (provider === 'nim' || provider === 'opencode')
+  const maxTokens = (provider === 'nim' || provider === 'opencode' || provider === 'opencode-zen')
     ? 32000
     : getTokenLimit(tokenMode || 'auto', model, manualTokens);
   const messages = [
@@ -436,8 +444,26 @@ app.post('/generate', async (req, res) => {
           throw new Error('Insufficient NVIDIA NIM credits or rate limit. Please check your NVIDIA API quota.');
         }
 
-        const d = await r.json();
+        const responseText = await r.text();
+        let d;
+        try { d = JSON.parse(responseText); } catch(parseErr) {
+          throw new Error('NVIDIA NIM returned invalid response. The model may not support chat completions.');
+        }
         if (d.error) throw new Error(d.error.message || 'NVIDIA NIM API Error');
+        raw = d.choices?.[0]?.message?.content || '';
+      } else if (provider === 'opencode-zen') {
+        const r = await fetch('https://opencode.ai/api/chat', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${ocZenKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model || 'opencode/minimax-m2.5-free', messages, max_tokens: tokens })
+        });
+
+        const responseText = await r.text();
+        let d;
+        try { d = JSON.parse(responseText); } catch(parseErr) {
+          throw new Error('OpenCode Zen returned invalid response.');
+        }
+        if (d.error) throw new Error(d.error.message || 'OpenCode Zen API Error');
         raw = d.choices?.[0]?.message?.content || '';
       } else {
         const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
